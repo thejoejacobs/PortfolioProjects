@@ -1,0 +1,127 @@
+install.packages("tidyverse")
+install.packages("readr")
+install.packages("lubridate")
+install.packages("ggplot2")
+install.packages("janitor")
+install.packages("skimr")
+install.packages("dplyr")
+
+library(tidyverse)
+library(readr)
+library(lubridate)
+library(ggplot2)
+library(janitor)
+library(skimr)
+library(dplyr)
+
+#uploading the data
+#the data i will be importing are the dailyActivity_merged, dailySteps_merged, dailyIntensities_merged, dailyCalories_merged and sleepDay which will be renamed to daily_activities, daily_steps, daily_intensities, daily_calories and sleep_day respectively
+daily_activities <- read_csv("/cloud/project/Fitabase Data 4.12.16-5.12.16/dailyActivity_merged.csv")
+daily_steps <- read_csv("/cloud/project/Fitabase Data 4.12.16-5.12.16/dailySteps_merged.csv")
+daily_intensities <- read_csv("/cloud/project/Fitabase Data 4.12.16-5.12.16/dailyIntensities_merged.csv")
+daily_calories <- read_csv("/cloud/project/Fitabase Data 4.12.16-5.12.16/dailyCalories_merged.csv")
+sleep_day <- read_csv("/cloud/project/Fitabase Data 4.12.16-5.12.16/sleepDay_merged.csv")
+
+glimpse(daily_activities)
+glimpse(daily_steps)
+glimpse(daily_intensities)
+glimpse(daily_calories)
+glimpse(sleep_day)
+
+#from the above, the column names has to be formatted to a more readable format
+daily_activities <- clean_names(daily_activities)
+daily_steps <- clean_names(daily_steps)
+daily_intensities <- clean_names(daily_intensities)
+daily_calories <- clean_names(daily_calories)
+sleep_day <- clean_names(sleep_day)
+
+glimpse(daily_activities)
+glimpse(daily_steps)
+glimpse(daily_intensities)
+glimpse(daily_calories)
+glimpse(sleep_day)
+
+#we check for duplicates
+sum(duplicated(daily_activities))
+sum(duplicated(daily_steps))
+sum(duplicated(daily_intensities))
+sum(duplicated(daily_calories))
+sum(duplicated(sleep_day))
+
+#the sleep_day has 3 duplicates, so we remove duplicates
+sleep_day <- unique(sleep_day)
+sum(duplicated(sleep_day))
+
+#after clearing duplicates, the next thing to do is to format date and make it consistent throughout the data
+daily_activities <- daily_activities %>%
+  rename(date = activity_date) %>%
+  mutate(date = as_date(date, format = "%m/%d/%Y"))
+daily_steps <- daily_steps %>%
+  rename(date = activity_day) %>%
+  mutate(date = as_date(date, format = "%m/%d/%Y"))
+daily_intensities <- daily_intensities %>%
+  rename(date = activity_day) %>%
+  mutate(date = as_date(date, format = "%m/%d/%Y"))
+daily_calories <- daily_calories %>%
+  rename(date = activity_day) %>%
+  mutate(date = as_date(date, format = "%m/%d/%Y"))
+sleep_day <- sleep_day%>% 
+  rename(date = sleep_day) %>% 
+  mutate(date = as_date(date, format = "%m/%d/%Y  %I:%M:%S %p"))
+
+glimpse(daily_activities)
+glimpse(daily_steps)
+glimpse(daily_intensities)
+glimpse(daily_calories)
+glimpse(sleep_day)
+
+#merging our data
+daily_activities_sleep <- merge(daily_activities, sleep_day, by=c ("id", "date"))
+glimpse(daily_activities_sleep)
+
+#adding two new columns named: sleep_efficiency and day_of_the_week
+sleep_effi <- daily_activities_sleep$total_minutes_asleep/daily_activities_sleep$total_time_in_bed*100
+daily_activities_sleep <- daily_activities_sleep %>%
+  mutate(sleep_efficiency = sleep_effi)
+daily_activities_sleep <- daily_activities_sleep %>%
+  mutate(day_of_the_week = weekdays(date))
+
+glimpse(daily_activities_sleep)
+head(daily_activities_sleep)
+
+summary(daily_activities_sleep)
+
+daily_activities_sleep$day_of_the_week <-ordered(daily_activities_sleep$day_of_the_week, levels=c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+
+by_day_daily_activities_sleep <-daily_activities_sleep%>%
+  group_by(day_of_the_week) %>%
+  summarize (dailysteps = mean(total_steps), dailysleep = mean(total_minutes_asleep))
+
+glimpse(by_day_daily_activities_sleep)
+
+ggplot(by_day_daily_activities_sleep) +
+  geom_col(aes(x=day_of_the_week, y=dailysteps, fill = dailysteps)) +
+  labs(title = "Average Steps by day of the week", x= "", y = "", caption = 'Data: Fitbit Fitness Tracker Data - 2016') +
+  theme(axis.text.x = element_text(angle = 45,vjust = 0.3))
+
+#the next thing to do is to find the average daily steps taken by each person and the corresponding calories burnt
+daily_steps_taken <- daily_activities_sleep %>%
+  group_by(id) %>%
+  summarize (average_daily_steps = mean(total_steps))
+daily_calories_burnt <- daily_activities_sleep %>%
+  group_by(id) %>%
+  summarize (average_daily_calories_burnt = mean(calories))
+
+glimpse(daily_steps_taken)
+glimpse(daily_calories_burnt)
+
+#next step is to view the relationship between calories and steps taken
+ggplot(daily_activities_sleep) + geom_point (mapping=aes(x=total_steps, y=calories)) +
+  labs(title = "Calories Burnt by Steps Taken", caption = "Data: FitBit Fitness Tracker Data - 2016")
+
+#viewing the relationship between time in bed and total minutes asleep
+ggplot(daily_activities_sleep) + 
+  geom_point(mapping = aes(x=total_time_in_bed, y=total_minutes_asleep)) +
+  geom_smooth(aes(x=total_time_in_bed, y=total_minutes_asleep)) +
+  labs(title = "Total Minutes Asleep VS Total Time in Bed", caption = "Data: FitBit Fitness Tracker Data - 2016")
+
